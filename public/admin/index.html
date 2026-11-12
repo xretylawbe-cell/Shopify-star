@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:900px;margin:auto}input,select{padding:8px;margin:3px 0;width:100%;box-sizing:border-box}button{padding:8px 12px}table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left}#msg{color:#c00}</style></head><body>
+<h2>Store admin</h2><div id="msg"></div>
+<div id="login"><input id="em" placeholder="Email"><input id="pw" type="password" placeholder="Password"><button onclick="login()">Log in</button></div>
+<div id="app" hidden><h3>Add product</h3>
+<input id="n" placeholder="Name"><input id="pr" type="number" placeholder="Retail price (₦)"><input id="st" type="number" placeholder="Stock"><input id="im" placeholder="Image URL"><input id="ti" placeholder='Wholesale tiers JSON e.g. [{"min":50,"price":1000}]'>
+<select id="s"><option>published</option><option>draft</option></select><button onclick="add()">Save product</button>
+<h3>Import / export</h3><a href="/api/admin/export/products.csv">Download products CSV</a> · Meta feed: <code id="feed"></code>
+<p>CSV columns: sku, name, retail_price (required); description, category, brand, gtin, image_url, tiers, stock, status.</p>
+<input id="f" type="file" accept=".csv"><button onclick="imp(false)">Check file</button><button id="go" onclick="imp(true)" hidden>Confirm import</button><pre id="rep"></pre>
+<h3>Products</h3><table id="pt"></table><h3>Orders</h3><table id="ot"></table></div>
+<script>
+const $=id=>document.getElementById(id);
+const api=(p,o={})=>fetch('/api'+p,{...o,headers:{'Content-Type':'application/json','x-requested-with':'fetch'},body:o.body&&JSON.stringify(o.body)}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d});
+const row=(t,cells)=>{const r=t.insertRow();cells.forEach(c=>{const td=r.insertCell();c instanceof Node?td.append(c):td.textContent=c})};
+async function login(){try{await api('/auth/admin-login',{method:'POST',body:{email:$('em').value,password:$('pw').value}});load()}catch(e){$('msg').textContent=e.message}}
+async function add(){try{await api('/admin/products',{method:'POST',body:{name:$('n').value,retail_price:+$('pr').value,stock:+$('st').value,image_url:$('im').value,tiers:$('ti').value?JSON.parse($('ti').value):[],status:$('s').value}});load()}catch(e){$('msg').textContent=e.message}}
+async function imp(c){try{const f=$('f').files[0];if(!f)return;const r=await api('/admin/import/products',{method:'POST',body:{csv:await f.text(),confirm:c}});
+$('rep').textContent=r.applied?`Done: ${r.created} created, ${r.updated} updated`:[...r.errors,`Will create ${r.will_create}, update ${r.will_update}`,r.warning].filter(Boolean).join('\n');$('go').hidden=r.applied||r.errors.length>0;if(r.applied)load()}catch(e){$('msg').textContent=e.message}}
+$('feed').textContent=location.origin+'/feeds/meta.csv';
+async function load(){try{const ps=await api('/admin/products'),os=await api('/admin/orders');$('login').hidden=true;$('app').hidden=false;$('msg').textContent='';
+$('pt').innerHTML='';ps.forEach(p=>{const b=document.createElement('button');b.textContent='Delete';b.onclick=async()=>{if(confirm('Delete '+p.name+'?')){await api('/admin/products/'+p.id,{method:'DELETE'});load()}};row($('pt'),[p.name,'₦'+p.retail_price,'stock '+p.stock,p.status,b])});
+$('ot').innerHTML='';os.forEach(o=>{const s=document.createElement('select');['pending','paid','processing','ready','shipped','completed','cancelled'].forEach(v=>{const x=new Option(v,v,0,v==o.status);s.add(x)});s.onchange=()=>api('/admin/orders/'+o.id+'/status',{method:'PUT',body:{status:s.value}});row($('ot'),['#'+o.id,o.name,'₦'+o.total,s])})}catch(e){}}
+load();
+</script></body></html>

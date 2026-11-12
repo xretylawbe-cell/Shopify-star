@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Store</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#fafafa;color:#222}header{background:#111;color:#fff;padding:14px 16px;display:flex;justify-content:space-between}main{padding:16px;max-width:900px;margin:auto}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px}.card img{width:100%;height:120px;object-fit:cover;border-radius:6px;background:#eee}button{padding:8px 12px;border:0;border-radius:6px;background:#0a7;color:#fff}input,textarea{width:100%;padding:8px;margin:4px 0;box-sizing:border-box}#msg{color:#c00}</style></head><body>
+<header><b id="title">My Store</b><span id="cartbtn"></span></header><main>
+<div id="msg"></div><div class="grid" id="grid"></div>
+<h3>Checkout</h3><div id="cart"></div>
+<input id="name" placeholder="Name"><input id="phone" placeholder="Phone"><input id="email" placeholder="Email"><input id="state" placeholder="State"><input id="city" placeholder="City"><input id="address" placeholder="Address"><textarea id="notes" placeholder="Order notes"></textarea>
+<button id="pay">Pay with Paystack</button></main>
+<script>
+const $=id=>document.getElementById(id);let cart=[],products=[];
+const api=(p,o={})=>fetch('/api'+p,{...o,headers:{'Content-Type':'application/json','x-requested-with':'fetch'},body:o.body&&JSON.stringify(o.body)}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d});
+const fmt=n=>'₦'+n.toLocaleString();
+function render(){$('cart').textContent=cart.length?cart.map(c=>c.name+' × '+c.qty).join(', ')+' (final price confirmed by server)':'Cart is empty';}
+api('/products').then(ps=>{products=ps;ps.forEach(p=>{const d=document.createElement('div');d.className='card';const i=document.createElement('img');i.src=p.image_url||'';i.alt='';const t=document.createElement('div');t.textContent=p.name+' — '+fmt(p.retail_price);const b=document.createElement('button');b.textContent=p.stock>0?'Add':'Sold out';b.disabled=p.stock<1;b.onclick=()=>{const c=cart.find(x=>x.product_id==p.id);c?c.qty++:cart.push({product_id:p.id,name:p.name,qty:1});render()};d.append(i,t,b);$('grid').append(d)})});
+$('pay').onclick=async()=>{try{const customer=Object.fromEntries(['name','phone','email','state','city','address','notes'].map(k=>[k,$(k).value]));
+const o=await api('/orders',{method:'POST',body:{items:cart.map(({product_id,qty})=>({product_id,qty})),customer}});
+const p=await api('/payments/initialize',{method:'POST',body:{order_id:o.order_id}});location=p.url}catch(e){$('msg').textContent=e.message}};
+const ref=new URLSearchParams(location.search).get('reference');
+if(ref)api('/payments/verify?reference='+encodeURIComponent(ref)).then(d=>{$('msg').style.color='#0a7';$('msg').textContent='Payment confirmed. Order #'+d.order_id}).catch(e=>$('msg').textContent=e.message);
+render();
+</script></body></html>
