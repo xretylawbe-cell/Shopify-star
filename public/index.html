@@ -1,20 +1,45 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Store</title>
 <style>body{font-family:system-ui,sans-serif;margin:0;background:#fafafa;color:#222}header{background:#111;color:#fff;padding:14px 16px;display:flex;justify-content:space-between}main{padding:16px;max-width:900px;margin:auto}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px}.card img{width:100%;height:120px;object-fit:cover;border-radius:6px;background:#eee}button{padding:8px 12px;border:0;border-radius:6px;background:#0a7;color:#fff}input,textarea{width:100%;padding:8px;margin:4px 0;box-sizing:border-box}#msg{color:#c00}</style></head><body>
-<header><b id="title">My Store</b><span id="cartbtn"></span></header><main>
-<div id="msg"></div><div class="grid" id="grid"></div>
+<header><b id="title">My Store</b><span id="cartbtn"></span></header><div id="promo" hidden style="background:#fe0;padding:8px;text-align:center"></div><main><img id="banner" alt="" hidden style="width:100%;max-height:200px;object-fit:cover;border-radius:8px"><p id="hero"></p>
+<div id="msg"></div><select id="fc"><option value="">All categories</option></select><select id="fo"><option value="">All collections</option></select><div class="grid" id="grid"></div>
+<h3>Account</h3><div id="acct"><input id="ae" placeholder="Email"><input id="ap" type="password" placeholder="Password (8+ characters)"><button onclick="sign('login')">Log in</button> <button onclick="sign('register')">Register</button></div>
+<div id="me" hidden><span id="ws"></span> <button id="wb" onclick="wreq()">Request wholesale access</button> <button onclick="orders()">My orders</button> <button onclick="out()">Log out</button><div id="mo"></div></div>
 <h3>Checkout</h3><div id="cart"></div>
 <input id="name" placeholder="Name"><input id="phone" placeholder="Phone"><input id="email" placeholder="Email"><input id="state" placeholder="State"><input id="city" placeholder="City"><input id="address" placeholder="Address"><textarea id="notes" placeholder="Order notes"></textarea>
-<button id="pay">Pay with Paystack</button></main>
+<input id="coupon" placeholder="Coupon code (optional)"><button id="pay">Pay with Paystack</button> <button id="wa" hidden>Order via WhatsApp</button><h3>Information</h3><div id="info"></div><div id="social"></div><footer id="foot" style="white-space:pre-wrap;margin-top:20px;color:#666"></footer></main>
 <script>
 const $=id=>document.getElementById(id);let cart=[],products=[];
 const api=(p,o={})=>fetch('/api'+p,{...o,headers:{'Content-Type':'application/json','x-requested-with':'fetch'},body:o.body&&JSON.stringify(o.body)}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error);return d});
 const fmt=n=>'₦'+n.toLocaleString();
 function render(){$('cart').textContent=cart.length?cart.map(c=>c.name+' × '+c.qty).join(', ')+' (final price confirmed by server)':'Cart is empty';}
-api('/products').then(ps=>{products=ps;ps.forEach(p=>{const d=document.createElement('div');d.className='card';const i=document.createElement('img');i.src=p.image_url||'';i.alt='';const t=document.createElement('div');t.textContent=p.name+' — '+fmt(p.retail_price);const b=document.createElement('button');b.textContent=p.stock>0?'Add':'Sold out';b.disabled=p.stock<1;b.onclick=()=>{const c=cart.find(x=>x.product_id==p.id);c?c.qty++:cart.push({product_id:p.id,name:p.name,qty:1});render()};d.append(i,t,b);$('grid').append(d)})});
+async function loadShop(){const q=new URLSearchParams();if($('fc').value)q.set('category',$('fc').value);if($('fo').value)q.set('collection',$('fo').value);
+const ps=await api('/products?'+q);$('grid').innerHTML='';ps.forEach(p=>{const d=document.createElement('div');d.className='card';const i=document.createElement('img');i.src=p.image_url||'';i.alt='';const t=document.createElement('div');t.textContent=p.name+' — '+fmt(p.retail_price);const sel=document.createElement('select');sel.hidden=true;const b=document.createElement('button');b.textContent=p.stock>0?'Add':'Sold out';b.disabled=p.stock<1;
+b.onclick=()=>{const v=sel.hidden?null:sel.value;const key=p.id+'-'+(v||'');const c=cart.find(x=>x.key==key);c?c.qty++:cart.push({key,product_id:p.id,variant_id:v?+v:undefined,name:p.name+(v?' ('+sel.selectedOptions[0].text+')':''),qty:1});render()};
+const a=document.createElement('a');a.href='/product.html?id='+p.id;a.textContent='Details & reviews';a.style.display='block';d.append(i,t,sel,b,a);$('grid').append(d);
+api('/products/'+p.id+'/variants').then(vs=>{if(vs.length){vs.forEach(x=>sel.add(new Option(x.label+(x.price?' – '+fmt(x.price):'')+(x.stock<1?' (sold out)':''),x.id)));sel.hidden=false;b.textContent='Add';b.disabled=false}})})}
+Promise.all([api('/categories'),api('/collections')]).then(([c,o])=>{c.forEach(x=>$('fc').add(new Option(x.name,x.name)));o.forEach(x=>$('fo').add(new Option(x.name,x.id)))});
+$('fc').onchange=$('fo').onchange=loadShop;loadShop();
 $('pay').onclick=async()=>{try{const customer=Object.fromEntries(['name','phone','email','state','city','address','notes'].map(k=>[k,$(k).value]));
-const o=await api('/orders',{method:'POST',body:{items:cart.map(({product_id,qty})=>({product_id,qty})),customer}});
+const o=await api('/orders',{method:'POST',body:{items:cart.map(({product_id,variant_id,qty})=>({product_id,qty})),customer,coupon:$('coupon').value}});
 const p=await api('/payments/initialize',{method:'POST',body:{order_id:o.order_id}});location=p.url}catch(e){$('msg').textContent=e.message}};
 const ref=new URLSearchParams(location.search).get('reference');
 if(ref)api('/payments/verify?reference='+encodeURIComponent(ref)).then(d=>{$('msg').style.color='#0a7';$('msg').textContent='Payment confirmed. Order #'+d.order_id}).catch(e=>$('msg').textContent=e.message);
-render();
+async function refresh(){const{user}=await api('/auth/me');const c=user&&user.role=='customer';$('acct').hidden=!!c;$('me').hidden=!c;if(!c)return;const w=await api('/wholesale/status');$('ws').textContent=w.approved?'Wholesale pricing active.':(w.request?'Wholesale request: '+w.request.status:'');$('wb').hidden=w.approved||!!(w.request&&w.request.status=='pending')}
+async function sign(k){try{await api('/auth/'+k,{method:'POST',body:{email:$('ae').value,password:$('ap').value}});$('msg').textContent='';refresh()}catch(e){$('msg').textContent=e.message}}
+async function out(){await api('/auth/logout',{method:'POST'});refresh()}
+async function wreq(){const b=prompt('Business name?');if(!b)return;try{await api('/wholesale/request',{method:'POST',body:{business_name:b,message:prompt('What do you want to buy? (optional)')||''}});refresh()}catch(e){$('msg').textContent=e.message}}
+async function orders(){const o=await api('/my-orders');$('mo').textContent=o.map(x=>'#'+x.id+' '+fmt(x.total)+' '+x.status).join(' | ')||'No orders yet'}
+let S={};
+api('/settings').then(s=>{S=s;if(s.store_name){document.title=s.store_name;$('title').textContent=s.store_name}
+if(s.promo_message){$('promo').textContent=s.promo_message;$('promo').hidden=false}
+$('hero').textContent=s.hero_text||s.tagline||'';
+if(s.banner_url){$('banner').src=s.banner_url;$('banner').hidden=false}
+$('foot').textContent=s.footer||'';
+[['About','about'],['Contact','contact'],['Delivery','delivery_info'],['Policies','policies']].forEach(([t,k])=>{if(!s[k])return;const d=document.createElement('details');const m=document.createElement('summary');m.textContent=t;const p=document.createElement('div');p.style.whiteSpace='pre-wrap';p.textContent=s[k];d.append(m,p);$('info').append(d)});
+[['Facebook','social_facebook'],['Instagram','social_instagram'],['TikTok','social_tiktok']].forEach(([t,k])=>{if(!s[k])return;const a=document.createElement('a');a.href=s[k];a.textContent=t+' ';a.rel='noopener';$('social').append(a)});
+if(s.whatsapp_number)$('wa').hidden=false});
+$('wa').onclick=()=>{if(!cart.length){$('msg').textContent='Add items to your cart first';return}
+const t='Hello, I would like to order from '+(S.store_name||'your store')+':\n'+cart.map(c=>'- '+c.name+' x '+c.qty).join('\n')+'\n\nName: '+$('name').value+'\nPhone: '+$('phone').value+'\nAddress: '+$('address').value+'\n\nPlease confirm the total.';
+window.open('https://wa.me/'+S.whatsapp_number+'?text='+encodeURIComponent(t),'_blank','noopener')};
+render();refresh();
 </script></body></html>

@@ -1,4 +1,9 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Product</title>
 <style>body{font-family:system-ui,sans-serif;max-width:600px;margin:auto;padding:16px}img{max-width:100%;border-radius:8px}</style></head><body>
-<a href="/">← Back to shop</a><h2 id="n"></h2><img id="i" alt=""><p id="p"></p><p id="d"></p>
-<script>fetch('/api/products').then(r=>r.json()).then(ps=>{const x=ps.find(p=>p.id==new URLSearchParams(location.search).get('id'));if(!x){n.textContent='Product not found';return}document.title=x.name;n.textContent=x.name;i.src=x.image_url||'';p.textContent='₦'+x.retail_price.toLocaleString();d.textContent=x.description})</script></body></html>
+<a href="/">← Back to shop</a><h2 id="n"></h2><img id="i" alt=""><p id="p"></p><p id="d"></p><h3>Reviews <span id="avg"></span></h3><div id="rv"></div>
+<div id="rf"><select id="rt"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select><br><textarea id="rc" rows="3" style="width:100%" placeholder="Write a review (you must be logged in)"></textarea><button onclick="post()">Submit review</button> <span id="rm"></span></div>
+<script>fetch('/api/products').then(r=>r.json()).then(ps=>{const x=ps.find(p=>p.id==new URLSearchParams(location.search).get('id'));if(!x){n.textContent='Product not found';return}document.title=x.name;n.textContent=x.name;i.src=x.image_url||'';p.textContent='₦'+x.retail_price.toLocaleString();d.textContent=x.description})
+const pid=new URLSearchParams(location.search).get('id'),H={'Content-Type':'application/json','x-requested-with':'fetch'};
+function showReviews(){fetch('/api/products/'+pid+'/reviews').then(r=>r.json()).then(d=>{avg.textContent=d.count?'('+d.average+'/5 from '+d.count+')':'';rv.innerHTML='';d.reviews.forEach(x=>{const e=document.createElement('p');e.textContent='★'.repeat(x.rating)+' '+x.name+': '+x.comment;rv.append(e)});if(!d.count)rv.textContent='No reviews yet.'})}
+function post(){fetch('/api/products/'+pid+'/reviews',{method:'POST',headers:H,body:JSON.stringify({rating:+rt.value,comment:rc.value})}).then(async r=>{const d=await r.json();rm.textContent=d.message||d.error;if(r.ok)rc.value=''})}
+showReviews();</script></body></html>

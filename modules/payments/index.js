@@ -19,8 +19,9 @@ exports.mount = (app, { db, cfg }) => {
     const d = await ps('/transaction/verify/' + encodeURIComponent(o.payment_ref));
     if (!d.status || d.data.status !== 'success' || d.data.amount !== o.total * 100) return res.status(402).json({ error: 'Payment not verified' });
     const claimed = await db.query("UPDATE orders SET status='paid' WHERE id=? AND status='pending' RETURNING id", [o.id]);
+    if (claimed.length && o.coupon_code) await db.query('UPDATE coupons SET used=used+1 WHERE code=?', [o.coupon_code]);
     if (claimed.length) for (const i of await db.query('SELECT * FROM order_items WHERE order_id=?', [o.id]))
-      await db.query('UPDATE products SET stock=CASE WHEN stock>=? THEN stock-? ELSE 0 END WHERE id=?', [i.qty, i.qty, i.product_id]);
+      await db.query(`UPDATE ${i.variant_id ? 'variants' : 'products'} SET stock=CASE WHEN stock>=? THEN stock-? ELSE 0 END WHERE id=?`, [i.qty, i.qty, i.variant_id || i.product_id]);
     res.json({ status: 'paid', order_id: o.id });
   });
 };
